@@ -189,6 +189,10 @@ class TemplateGeometry {
       !this.polygon.contains(wall.data.c[2], wall.data.c[3])
     );
   }
+  
+  static getDistance(p1,p2){
+      return Math.sqrt(Math.pow(p1.x - p2.x,2) + Math.pow(p1.y - p2.y,2));     
+}
 }
 
 class BlastZone {
@@ -213,11 +217,10 @@ class BlastZone {
         this.wallsToDestroy.push(wall.id);
         continue
       }
-
-      if (this.templateGeometry.isOutside(wall)) {
+      let intersections = this.templateGeometry.getIntersection(wall);
+      if (this.templateGeometry.isOutside(wall) && intersections.length == 0) {
         continue;
       }
-      let intersections = this.templateGeometry.getIntersection(wall);
       switch (intersections.length) {
         case 1:
           let wallData;
@@ -232,7 +235,6 @@ class BlastZone {
           } else {
             oustidePoint = { x: wall.data.c[2], y: wall.data.c[3] };
           }
-          console.log(intersections)
           wallData = {
             "c": [
                 oustidePoint.x,
@@ -254,6 +256,76 @@ class BlastZone {
 
           break;
         case 2:
+            const dist = TemplateGeometry.getDistance(intersections[0],{x:wall.data.c[0],y:wall.data.c[1]});
+            const dist2 = TemplateGeometry.getDistance(intersections[1],{x:wall.data.c[0],y:wall.data.c[1]});
+            let wallData1,wallData2;
+            if(dist>dist2){
+                wallData1 = {
+                    "c": [
+                        wall.data.c[0],
+                        wall.data.c[1],
+                        intersections[1].x,
+                        intersections[1].y,
+                      ],
+                    "move": 1,
+                    "sense": 1,
+                    "sound": 1,
+                    "dir": 0,
+                    "door": 0,
+                    "ds": 0,
+                    "flags": wall.data.flags,
+                }
+                wallData2 = {
+                    "c": [
+                        wall.data.c[2],
+                        wall.data.c[3],
+                        intersections[0].x,
+                        intersections[0].y,
+                      ],
+                    "move": 1,
+                    "sense": 1,
+                    "sound": 1,
+                    "dir": 0,
+                    "door": 0,
+                    "ds": 0,
+                    "flags": wall.data.flags,
+                }
+            }else{
+                wallData1 = {
+                    "c": [
+                        wall.data.c[0],
+                        wall.data.c[1],
+                        intersections[0].x,
+                        intersections[0].y,
+                      ],
+                    "move": 1,
+                    "sense": 1,
+                    "sound": 1,
+                    "dir": 0,
+                    "door": 0,
+                    "ds": 0,
+                    "flags": wall.data.flags,
+                }
+                wallData2 = {
+                    "c": [
+                        wall.data.c[2],
+                        wall.data.c[3],
+                        intersections[1].x,
+                        intersections[1].y,
+                      ],
+                    "move": 1,
+                    "sense": 1,
+                    "sound": 1,
+                    "dir": 0,
+                    "door": 0,
+                    "ds": 0,
+                    "flags": wall.data.flags,
+                }
+            }
+            this.wallsToDestroy.push(wall.id);
+            this.wallsToCreate.push(wallData1);
+            this.wallsToCreate.push(wallData2);
+
           break;
       }
     }
