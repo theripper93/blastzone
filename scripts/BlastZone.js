@@ -1,5 +1,10 @@
 class TemplateGeometry {
-  static getPolygon(template) {
+  constructor(template) {
+    this.template = template;
+    this.polygon = this.getPolygon(template);
+  }
+
+  getPolygon(template) {
     switch (template.data.t) {
       case CONST.MEASURED_TEMPLATE_TYPES.CIRCLE:
         return TemplateGeometry.getCircle(template.data);
@@ -95,46 +100,169 @@ class TemplateGeometry {
     const y3 = line2.y1;
     const x4 = line2.x2;
     const y4 = line2.y2;
-    const denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
-    if (denom === 0) {
-      return null;
+    var eps = 0.0000001;
+    function between(a, b, c) {
+      return a - eps <= b && b <= c + eps;
     }
-    const ua = (x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3);
-    const ub = (x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3);
-    const x = ua / denom;
-    const y = ub / denom;
+    var x =
+      ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) /
+      ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+    var y =
+      ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) /
+      ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+    if (isNaN(x) || isNaN(y)) {
+      return false;
+    } else {
+      if (x1 >= x2) {
+        if (!between(x2, x, x1)) {
+          return false;
+        }
+      } else {
+        if (!between(x1, x, x2)) {
+          return false;
+        }
+      }
+      if (y1 >= y2) {
+        if (!between(y2, y, y1)) {
+          return false;
+        }
+      } else {
+        if (!between(y1, y, y2)) {
+          return false;
+        }
+      }
+      if (x3 >= x4) {
+        if (!between(x4, x, x3)) {
+          return false;
+        }
+      } else {
+        if (!between(x3, x, x4)) {
+          return false;
+        }
+      }
+      if (y3 >= y4) {
+        if (!between(y4, y, y3)) {
+          return false;
+        }
+      } else {
+        if (!between(y3, y, y4)) {
+          return false;
+        }
+      }
+    }
     return { x: x, y: y };
   }
 
-  static getIntersection(wall, polygon) {
-      const line1 = {
-          x1:wall.data.c[0],
-          y1:wall.data.c[1],
-          x2:wall.data.c[2],
-          y2:wall.data.c[3],
-        };
-        let intersections = [];
-        for(let i=0; i<polygon.points.length-2; i+=2){
-          const line2 = {
-            x1:polygon.points[i],
-            y1:polygon.points[i+1],
-            x2:polygon.points[i+2],
-            y2:polygon.points[i+3]
+  getIntersection(wall) {
+    const line1 = {
+      x1: wall.data.c[0],
+      y1: wall.data.c[1],
+      x2: wall.data.c[2],
+      y2: wall.data.c[3],
+    };
+    let intersections = [];
+    for (let i = 0; i < this.polygon.points.length - 2; i += 2) {
+      const line2 = {
+        x1: this.polygon.points[i],
+        y1: this.polygon.points[i + 1],
+        x2: this.polygon.points[i + 2],
+        y2: this.polygon.points[i + 3],
+      };
+      const intersection = TemplateGeometry.lineLineIntersection(line1, line2);
+      if (intersection) {
+        intersections.push(intersection);
+      }
+    }
+    return intersections;
+  }
+
+  isInside(wall) {
+    return (
+      this.polygon.contains(wall.data.c[0], wall.data.c[1]) &&
+      this.polygon.contains(wall.data.c[2], wall.data.c[3])
+    );
+  }
+
+  isOutside(wall) {
+    return (
+      !this.polygon.contains(wall.data.c[0], wall.data.c[1]) &&
+      !this.polygon.contains(wall.data.c[2], wall.data.c[3])
+    );
+  }
+}
+
+class BlastZone {
+  constructor(template) {
+    this.template = template;
+    this.wallsToDestroy = [];
+    this.wallsToCreate = [];
+  }
+
+  async createWalls() {
+    canvas.scene.createEmbeddedDocuments("Wall", this.wallsToCreate);
+  }
+
+  async destroyWalls() {
+    canvas.scene.deleteEmbeddedDocuments("Wall", this.wallsToDestroy);
+  }
+
+  get walls() {
+    this.templateGeometry = new TemplateGeometry(this.template);
+    for (let wall of canvas.walls.placeables) {
+      if (this.templateGeometry.isInside(wall)) {
+        this.wallsToDestroy.push(wall.id);
+        continue
+      }
+
+      if (this.templateGeometry.isOutside(wall)) {
+        continue;
+      }
+      let intersections = this.templateGeometry.getIntersection(wall);
+      switch (intersections.length) {
+        case 1:
+          let wallData;
+          let oustidePoint;
+          if (
+            !this.templateGeometry.polygon.contains(
+              wall.data.c[0],
+              wall.data.c[1]
+            )
+          ) {
+            oustidePoint = { x: wall.data.c[0], y: wall.data.c[1] };
+          } else {
+            oustidePoint = { x: wall.data.c[2], y: wall.data.c[3] };
           }
-          const intersection = TemplateGeometry.lineLineIntersection(line1, line2);
-          if(intersection){
-            intersections.push(intersection);
-          }
-        
+          console.log(intersections)
+          wallData = {
+            "c": [
+                oustidePoint.x,
+                oustidePoint.y,
+                intersections[0].x,
+                intersections[0].y,
+              ],
+            "move": 1,
+            "sense": 1,
+            "sound": 1,
+            "dir": 0,
+            "door": 0,
+            "ds": 0,
+            "flags": wall.data.flags,
         }
-        return intersections;
+
+          this.wallsToDestroy.push(wall.id);
+          this.wallsToCreate.push(wallData);
+
+          break;
+        case 2:
+          break;
+      }
+    }
+    return { toDestry: this.wallsToDestroy, toCreate: this.wallsToCreate };
   }
 
-  static isInside(wall, polygon) {
-      return polygon.contains(wall.data.c[0], wall.data.c[1]) && polygon.contains(wall.data.c[2], wall.data.c[3]);
-  }
-
-  static isOutside(wall, polygon) {
-    return !polygon.contains(wall.data.c[0], wall.data.c[1]) && !polygon.contains(wall.data.c[2], wall.data.c[3]);
+  async blast() {
+    let walls = this.walls;
+    await this.createWalls();
+    await this.destroyWalls();
   }
 }
