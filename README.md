@@ -1,4 +1,5 @@
 # Blastzone
+## This Module is no longer supported, if you wish to adopt the module feel free to contact me on my discord https://theripper93.com/
 ## The most dangerous module on foundry
 ## Blast away those pesky walls using templates
 
